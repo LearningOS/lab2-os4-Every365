@@ -1,6 +1,6 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT, kernel_stack_position};
+use crate::config::{kernel_stack_position, TRAP_CONTEXT, MAX_SYSCALL_NUM};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::trap::{trap_handler, TrapContext};
 
@@ -8,11 +8,10 @@ use crate::trap::{trap_handler, TrapContext};
 pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     pub task_cx: TaskContext,
+    pub stats: TaskStatsInfo,
     pub memory_set: MemorySet,
     pub trap_cx_ppn: PhysPageNum,
     pub base_size: usize,
-    // Synced from LAB1
-    pub task_statistics: TaskStatistics
 }
 
 impl TaskControlBlock {
@@ -37,14 +36,17 @@ impl TaskControlBlock {
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
         );
+        let stats = TaskStatsInfo{
+            first_run_time: 0,
+            syscall_times:[0; MAX_SYSCALL_NUM], 
+        };
         let task_control_block = Self {
             task_status,
             task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+            stats,
             memory_set,
             trap_cx_ppn,
             base_size: user_sp,
-            // Suit LAB1 modification
-            task_statistics: TaskStatistics::default(),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -59,7 +61,7 @@ impl TaskControlBlock {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 /// task status: UnInit, Ready, Running, Exited
 pub enum TaskStatus {
     UnInit,
@@ -68,15 +70,17 @@ pub enum TaskStatus {
     Exited,
 }
 
-// Synced from LAB1
-#[derive(Copy, Clone)]
-pub struct TaskStatistics {
-    pub start_time: usize,
-    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+#[derive(Copy, Clone, Debug)]
+pub struct TaskStatsInfo {
+    pub first_run_time: usize,
+    pub syscall_times: [u32; MAX_SYSCALL_NUM], 
 }
 
-impl Default for TaskStatistics {
+impl Default for TaskStatsInfo {
     fn default() -> Self {
-        Self { start_time: Default::default(), syscall_times: [0; MAX_SYSCALL_NUM] }
+        Self {
+            first_run_time: 0, 
+            syscall_times: [0; MAX_SYSCALL_NUM],
+        }
     }
 }

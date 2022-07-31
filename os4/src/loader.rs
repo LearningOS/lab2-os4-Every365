@@ -1,4 +1,3 @@
-
 //! Loading user applications into memory
 
 /// Get the total number of applications.
