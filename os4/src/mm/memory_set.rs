@@ -47,22 +47,6 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
-    pub fn munmap(&mut self, vpn: VirtPageNum) {
-        self.areas[0].unmap_one(&mut self.page_table, vpn);
-    }
-    pub fn find_vpn(&self, vpn: VirtPageNum) -> bool {
-        let pte = self.translate(vpn);
-        match pte {
-            Some(x) => {
-                if x.is_valid() {
-                    return true;
-                } else {
-                    return false;
-                }
-            },
-            None => return false,
-        }
-    }
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
@@ -232,6 +216,15 @@ impl MemorySet {
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
+    }
+    // corresponding mmap can be insert_framed_data
+    // Added by LAB2
+    pub fn munmap(&mut self, vpn: VirtPageNum) {
+        for area in &mut self.areas {
+            if vpn < area.vpn_range.get_end() && vpn >= area.vpn_range.get_start() {
+                area.unmap_one(&mut self.page_table, vpn);
+            }
+        }
     }
 }
 
