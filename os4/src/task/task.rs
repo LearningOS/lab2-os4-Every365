@@ -1,6 +1,6 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::{kernel_stack_position, TRAP_CONTEXT, MAX_SYSCALL_NUM};
+use crate::config::{kernel_stack_position, MAX_SYSCALL_NUM, TRAP_CONTEXT};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::trap::{trap_handler, TrapContext};
 
@@ -8,10 +8,11 @@ use crate::trap::{trap_handler, TrapContext};
 pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     pub task_cx: TaskContext,
-    pub stats: TaskStatsInfo,
     pub memory_set: MemorySet,
     pub trap_cx_ppn: PhysPageNum,
     pub base_size: usize,
+    pub first_run_time: usize, // the first time the task is run
+    pub syscall_times:[u32; MAX_SYSCALL_NUM], // the times of syscall
 }
 
 impl TaskControlBlock {
@@ -36,17 +37,14 @@ impl TaskControlBlock {
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
         );
-        let stats = TaskStatsInfo{
-            first_run_time: 0,
-            syscall_times:[0; MAX_SYSCALL_NUM], 
-        };
         let task_control_block = Self {
             task_status,
             task_cx: TaskContext::goto_trap_return(kernel_stack_top),
-            stats,
             memory_set,
             trap_cx_ppn,
             base_size: user_sp,
+            first_run_time: 0,
+            syscall_times: [0; MAX_SYSCALL_NUM],
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -59,28 +57,28 @@ impl TaskControlBlock {
         );
         task_control_block
     }
+
+    /// return the first time the task is run
+    pub fn get_first_run_time(&self) -> usize {
+        self.first_run_time
+    }
+    /// Returns the system call and the corresponding number of times
+    pub fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        self.syscall_times
+    }
+    pub fn update_first_run_time(&mut self, time: usize) {
+        self.first_run_time = time;
+    }
+    pub fn update_syscall_times(&mut self, syscall_id:usize) {
+        self.syscall_times[syscall_id] += 1;
+    }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq)]
 /// task status: UnInit, Ready, Running, Exited
 pub enum TaskStatus {
     UnInit,
     Ready,
     Running,
     Exited,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct TaskStatsInfo {
-    pub first_run_time: usize,
-    pub syscall_times: [u32; MAX_SYSCALL_NUM], 
-}
-
-impl Default for TaskStatsInfo {
-    fn default() -> Self {
-        Self {
-            first_run_time: 0, 
-            syscall_times: [0; MAX_SYSCALL_NUM],
-        }
-    }
 }

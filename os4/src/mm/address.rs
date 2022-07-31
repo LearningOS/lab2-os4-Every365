@@ -126,12 +126,10 @@ impl PhysAddr {
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
-
-    pub fn get_ref<T>(&self) -> &'static T {
-        unsafe { (self.0 as *const T).as_ref().unwrap() }
-    }
-    pub fn get_mut<T>(&self) -> &'static mut T {
-        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    pub fn get_mut<T>(&mut self) -> &'static mut T {
+        unsafe {
+            (self.0 as *mut T).as_mut().unwrap()
+        }
     }
 }
 impl From<PhysAddr> for PhysPageNum {
@@ -168,8 +166,8 @@ impl PhysPageNum {
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
     }
     pub fn get_mut<T>(&self) -> &'static mut T {
-        let pa: PhysAddr = (*self).into();
-        unsafe { (pa.0 as *mut T).as_mut().unwrap() }
+        let mut pa: PhysAddr = (*self).into();
+        pa.get_mut()
     }
 }
 

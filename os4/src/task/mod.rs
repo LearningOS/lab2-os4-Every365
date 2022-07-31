@@ -23,10 +23,8 @@ pub use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
-
-use crate::timer::get_time_us;
-
-use self::task::TaskStatsInfo;
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{MapPermission, VirtAddr};
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -76,7 +74,6 @@ lazy_static! {
 
 impl TaskManager {
     /// Run the first task in task list.
-    ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch4, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
@@ -131,6 +128,16 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
+    fn current_add_area(&self,start:VirtAddr,end:VirtAddr,permission:MapPermission){
+        let mut inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        inner.tasks[index].memory_set.insert_framed_area(start,end,permission);
+    }
+    fn current_delete_page(&self,start:VirtAddr){
+        let mut inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        inner.tasks[index].memory_set.remove_from_startaddr(start);
+    }
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
@@ -152,25 +159,20 @@ impl TaskManager {
         }
     }
 
-    fn update_cur_task_syscall_cnt(&self, syscall_id: usize) {
+    pub fn update_current_task_syscall(&self,syscall_id:usize){
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].stats.syscall_times[syscall_id] += 1;
-        // println!("current: {}, syscall: {}, cnt: {}", current, syscall_id, inner.tasks[current].stats.syscall_times[syscall_id]);
+        inner.tasks[current].update_syscall_times(syscall_id)
     }
-
-    fn get_cur_task_info(&self) -> (TaskStatus, TaskStatsInfo) {
+    pub fn get_current_task_syscall(&self) -> [u32; MAX_SYSCALL_NUM]{
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        let t = &inner.tasks[current];
-        (t.task_status, t.stats)
+        inner.tasks[current].get_syscall_times()
     }
-
-    fn get_tcb_ref_mut<T, R>(&self, mut f: T) -> R where T:FnMut(&mut TaskControlBlock) -> R {
-        let mut inner = self.inner.exclusive_access();
+    pub fn get_current_task_first_run_time(&self) -> usize{
+        let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        let t = &mut inner.tasks[current];
-        f(t)
+        inner.tasks[current].get_first_run_time()
     }
 }
 
@@ -216,16 +218,22 @@ pub fn current_user_token() -> usize {
 pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
 }
-
-
-pub fn update_cur_task_syscall_cnt(syscall_id: usize) {
-    TASK_MANAGER.update_cur_task_syscall_cnt(syscall_id);
+pub fn update_current_task_syscall(syscall_id:usize){
+    TASK_MANAGER.update_current_task_syscall(syscall_id);
+}
+pub fn get_current_task_syscall() -> [u32; MAX_SYSCALL_NUM]{
+    TASK_MANAGER.get_current_task_syscall()
+}
+pub fn get_current_task_first_run_time() -> usize{
+    TASK_MANAGER.get_current_task_first_run_time()
 }
 
-pub fn get_cur_task_info() -> (TaskStatus, TaskStatsInfo) {
-    TASK_MANAGER.get_cur_task_info()
+pub fn current_add_area(start:VirtAddr,end:VirtAddr,permission:MapPermission){
+    //获得当前任务的引用
+    //将对应的地址区间插入
+     TASK_MANAGER.current_add_area(start,end,permission);
 }
 
-pub fn get_tcb_ref_mut<T, R>(f: T) -> R where T:FnMut(&mut TaskControlBlock) -> R {
-    TASK_MANAGER.get_tcb_ref_mut(f)
+pub fn current_delete_page(start:VirtAddr) {
+    TASK_MANAGER.current_delete_page(start);
 }
